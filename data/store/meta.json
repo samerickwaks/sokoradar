@@ -1,0 +1,13 @@
+{
+  "generated_at": "2026-10-21T09:14:43+00:00",
+  "data_end": "2026-09-01",
+  "version": "1.0.0",
+  "python": "3.12.10",
+  "series": 67,
+  "live_series": 42,
+  "markets": 30,
+  "observations": 5386,
+  "selected_model": "sokoradar",
+  "alert_route": "clf",
+  "sources": "WFP (CC BY-IGO) via HDX; CHIRPS rainfall and MODIS NDVI via HDX (WFP/CHC/NASA); Central Bank of Kenya; World Bank Pink Sheet and RTFP"
+}

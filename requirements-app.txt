@@ -1,0 +1,17 @@
+# Serving only (API container and dashboard): no Prophet, SHAP or MLflow needed.
+numpy==2.2.6
+pandas==3.0.6
+scipy==1.18.1
+pyarrow==19.0.1
+scikit-learn==1.9.1
+lightgbm==4.7.0
+xgboost==3.4.1
+matplotlib==3.11.2
+plotly==7.1.0
+fastapi==0.156.5
+uvicorn==0.54.0
+python-multipart==0.0.32
+requests==2.34.2
+PyYAML==6.0.3
+joblib==1.6.0
+cryptography==50.0.2

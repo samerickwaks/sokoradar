@@ -1,0 +1,151 @@
+# SokoRadar configuration.
+# Everything the pipeline needs to know about sources, scope and thresholds lives here,
+# so a neighbouring country is mostly a change of this file (see README "Running for another country").
+
+country:
+  iso3: KEN
+  name: Kenya
+  currency: KES
+  capital_market_county: Nairobi
+
+sources:
+  wfp_prices:
+    hdx_dataset: wfp-food-prices-for-kenya
+    resource_name: "Kenya - Food Prices"
+    file: wfp_food_prices_ken.csv
+  wfp_markets:
+    hdx_dataset: wfp-food-prices-for-kenya
+    resource_name: "Kenya - Markets"
+    file: wfp_markets_ken.csv
+  rainfall:
+    hdx_dataset: ken-rainfall-subnational
+    resource_name: ken-rainfall-subnat-full.csv
+    file: ken-rainfall-subnat-full.csv
+  ndvi:
+    hdx_dataset: ken-ndvi-subnational
+    resource_name: ken-ndvi-subnat-full.csv
+    file: ken-ndvi-subnat-full.csv
+  rtfp_food:
+    hdx_dataset: kenya-real-time-prices
+    resource_name: real-time-food-prices-for-kenya.csv
+    file: real-time-food-prices-for-kenya.csv
+  ipc:
+    hdx_dataset: kenya-acute-food-insecurity-country-data
+    resource_name: ipc_ken_level1_long_latest.csv
+    file: ipc_ken_level1_long_latest.csv
+  pink_sheet:
+    # The World Bank moves this file each month; the page below is scraped for the current link.
+    landing_page: https://www.worldbank.org/en/research/commodity-markets
+    link_pattern: 'https://[^"]*CMO-Historical-Data-Monthly[^"]*\.xlsx'
+    file: CMO-Historical-Data-Monthly.xlsx
+  cbk_fx:
+    url: https://www.centralbank.go.ke/uploads/fx_rates/historical_data.csv
+    file: cbk_fx_historical.csv
+
+hdx_api: https://data.humdata.org/api/3/action/package_show?id=
+
+# Commodities SokoRadar forecasts. Raw WFP names are mapped onto these canonical names.
+commodities:
+  maize:
+    label: Maize
+    label_sw: Mahindi
+    wfp_names: ["Maize", "Maize (white)", "Maize (white, dry)"]
+  beans:
+    label: Beans
+    label_sw: Maharagwe
+    wfp_names: ["Beans", "Beans (dry)"]
+  maize_flour:
+    label: Maize flour
+    label_sw: Unga wa mahindi
+    wfp_names: ["Maize flour", "Maize flour (white)"]
+  goat_meat:
+    label: Goat meat
+    label_sw: Nyama ya mbuzi
+    wfp_names: ["Meat (goat)"]
+
+price_types: [Retail, Wholesale]
+
+# World Bank RTFP column names used for the benchmark and for goat prices (terms of trade).
+rtfp_columns:
+  maize: c_maize_fao
+  beans: c_beans
+  goat: c_livestock_goat_s_fao
+
+prep:
+  min_months: 36            # WFP's minimum for a reliable seasonal trend
+  outlier_log_mad: 5.0      # drop prices further than this many MADs from the series' rolling median
+  outlier_min_ratio: 2.5    # ...and at least this many times above/below it
+  market_merge_km: 15       # same-named markets closer than this are one market
+  rtfp_match_km: 30         # nearest World Bank RTFP market must be this close
+
+alps:
+  min_obs: 36
+  thresholds:               # WFP ALPS guidance (2014)
+    stress: 0.25
+    alert: 1.0
+    crisis: 2.0
+
+forecast:
+  horizons: [1, 2, 3]
+  interval_level: 0.80
+  fresh_months: 2           # data no older than this is "fresh"
+  live_months: 3            # live while the 3-month horizon still reaches the latest data month
+
+backtest:
+  first_test_year: 2009     # earliest fold (needed for the 2011 replay)
+  metric_years: [2015, 2025]
+  holdout_year: 2026        # untouched final test
+  calibration_years: 3      # past out-of-sample years used for conformal scores and alert thresholds
+  replay_years: [2011, 2017, 2022]
+  statistical_models: true  # SARIMAX and Prophet are slow; switch off for quick runs
+  prophet: true
+
+alerts:
+  target_recall: 0.70
+  min_precision: 0.50
+
+# Point models minimise absolute error (objective l1): staple price changes are heavy-tailed
+# and the forecasts are judged on MAE. Small trees and large leaves keep a weak signal from
+# being drowned by noise.
+lightgbm:
+  n_estimators: 300
+  learning_rate: 0.03
+  num_leaves: 7
+  min_child_samples: 50
+  subsample: 0.8
+  subsample_freq: 1
+  colsample_bytree: 0.8
+  reg_lambda: 1.0
+  verbose: -1
+
+xgboost:
+  n_estimators: 300
+  learning_rate: 0.03
+  max_depth: 3
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 20
+
+ensemble:
+  # Adaptive ensemble: per horizon and (commodity, price type), components are weighted by
+  # 1 / MAE^2 of their out-of-sample errors in the previous `window` backtest years.
+  candidates: [naive, smooth, lgbm, lgbm_smooth, xgb, sarimax, prophet]
+  default: [smooth, lgbm, lgbm_smooth]
+  window: 3
+  min_rows: 30
+
+seasons:
+  # Kenya's bimodal calendar. Months are 1-12.
+  lean: [3, 4, 5, 6]                       # pre long-rains-harvest lean season
+  pastoral_dry: [1, 2, 3, 7, 8, 9]         # dry seasons in pastoral areas
+  harvest_high_potential: [10, 11, 12]     # long-rains maize harvest in the grain basket
+  harvest_marginal: [1, 2, 7, 8]           # short- and long-rains harvests in marginal areas
+  high_potential_counties: [Uasin Gishu, Trans Nzoia, Nakuru, Nandi, Bungoma, Kakamega,
+                            Narok, Elgeyo-Marakwet, Bomet, Kericho, Nyandarua, Kisii, Nyamira]
+
+sms:
+  sender_id: ""             # blank in the sandbox
+  sandbox: true
+
+ussd:
+  service_code: "*384*7262#"   # SOKO on the keypad; set to the code Africa's Talking assigns

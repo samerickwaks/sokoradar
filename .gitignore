@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+# raw downloads are re-fetched by the pipeline; processed tables are rebuilt
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/interim*
+data/full_run.log
+# personal data never goes into git
+data/subscribers.db
+data/sms_outbox.jsonl
+mlruns/
+.env
+.ipynb_checkpoints/
+# local tool settings (not part of the project)
+.claude/
+# working notes and helper scripts (not part of the submission)
+docs/deployment.md
+docs/demo_script.md
+docs/user_testing_protocol.md
+docs/model_selection.md
+scripts/

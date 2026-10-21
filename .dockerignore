@@ -1,0 +1,12 @@
+.venv
+data/raw
+data/processed
+data/interim*
+mlruns
+notebooks
+tests
+docs
+reports
+**/__pycache__
+*.pyc
+.git

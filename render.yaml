@@ -1,0 +1,20 @@
+# Render blueprint: free web service for the SokoRadar API (Docker).
+services:
+  - type: web
+    name: sokoradar-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: SOKORADAR_ADMIN_TOKEN
+        sync: false
+      - key: SOKORADAR_HASH_SALT
+        sync: false
+      - key: SOKORADAR_SECRET_KEY
+        sync: false
+      - key: AT_USERNAME
+        value: sandbox
+      - key: AT_API_KEY
+        sync: false

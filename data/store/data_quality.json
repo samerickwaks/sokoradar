@@ -1,0 +1,43 @@
+{
+  "raw_rows": 28463,
+  "raw_markets": 226,
+  "raw_commodities": 51,
+  "raw_period": "2006-01 to 2026-09",
+  "rows_in_scope": 9521,
+  "rows_unit_unparsed": 0,
+  "markets_merged": 6,
+  "merged_pairs": [
+    {
+      "market": "Marigat (Baringo)",
+      "market_canon": "Marigat town (Baringo)"
+    },
+    {
+      "market": "Lodwar town",
+      "market_canon": "Lodwar (Turkana)"
+    },
+    {
+      "market": "Garissa",
+      "market_canon": "Garissa town (Garissa)"
+    },
+    {
+      "market": "Marsabit town",
+      "market_canon": "Marsabit"
+    },
+    {
+      "market": "Kitui town (Kitui)",
+      "market_canon": "Kitui"
+    },
+    {
+      "market": "Mandera town",
+      "market_canon": "Mandera"
+    }
+  ],
+  "series_before_filter": 625,
+  "outliers_dropped": 3,
+  "series_kept": 67,
+  "series_short": 558,
+  "observations_kept": 5386,
+  "markets_kept": 30,
+  "kept_period": "2006-01 to 2026-09",
+  "markets_without_county": []
+}

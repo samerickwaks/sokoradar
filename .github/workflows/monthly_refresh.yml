@@ -1,0 +1,70 @@
+name: Monthly refresh
+
+# One trigger runs the whole system: download -> clean -> backtest -> retrain -> forecast ->
+# bulletin, then commits the new forecast store so the API and dashboard redeploy.
+on:
+  schedule:
+    - cron: "0 6 6 * *"   # 06:00 UTC on the 6th, after WFP, CHIRPS and the Pink Sheet have updated
+  workflow_dispatch:
+    inputs:
+      quick:
+        description: "Skip SARIMAX/Prophet and the ablation (faster)"
+        type: boolean
+        default: false
+      send_sms:
+        description: "Broadcast SMS alerts after the refresh"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monthly-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          pip install -r requirements.txt
+          pip install -e . --no-deps
+      - name: Run pipeline
+        env:
+          QUICK: ${{ inputs.quick && '--quick' || '' }}
+        run: python -m sokoradar.pipeline run $QUICK
+      - name: Tests on the refreshed store
+        run: pytest -q
+      - name: Commit refreshed forecasts
+        run: |
+          git config user.name "sokoradar-bot"
+          git config user.email "sokoradar-bot@users.noreply.github.com"
+          git add data/store models docs
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Monthly refresh: data to $(python -c "import json;print(json.load(open('data/store/meta.json'))['data_end'][:7])")"
+            git push
+          fi
+      - name: Redeploy API
+        if: env.RENDER_DEPLOY_HOOK != ''
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
+      - name: SMS alerts
+        if: ${{ inputs.send_sms }}
+        env:
+          AT_USERNAME: ${{ secrets.AT_USERNAME }}
+          AT_API_KEY: ${{ secrets.AT_API_KEY }}
+          SOKORADAR_HASH_SALT: ${{ secrets.SOKORADAR_HASH_SALT }}
+          SOKORADAR_SECRET_KEY: ${{ secrets.SOKORADAR_SECRET_KEY }}
+          SOKORADAR_SUBSCRIBERS_DB: ${{ secrets.SOKORADAR_SUBSCRIBERS_DB }}
+        run: python -m sokoradar.sms broadcast
