@@ -40,7 +40,7 @@ held out.
 | Actual prices inside the 80% interval | 75–85% | 78–79% |
 | Alert recall / precision, 1 month ahead | 0.70 / 0.50 | 0.83 / 0.67 |
 | Alert recall / precision, 2 months ahead | 0.70 / 0.50 | 0.82 / 0.33 |
-| Warning before current-month ALPS in drought replays | at least 1 month | 22 of 25 episodes, 2.2 months on average |
+| Warning before current-month ALPS in drought replays | at least 1 month | 23 of 25 episodes, 1.8 months on average |
 | Dashboard and USSD response | under 3 s and 2 s | 0.45 s and under 0.2 s |
 | Unaided USSD use | 8 of 10 users | not yet tested |
 

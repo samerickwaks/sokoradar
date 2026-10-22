@@ -26,8 +26,8 @@ On 2015–2025 rolling-origin backtests (each year forecast only from earlier ye
   Two months ahead recall stays at 82%, but precision falls to 33% (target 50%, not met). The
   models anticipate **63% of new alerts two months ahead**, which today's current-month ALPS
   cannot do by construction.
-- **In replays of 2011, 2017 and 2022, 22 of 25 alert episodes (88%) were flagged at least one
-  month before ALPS turned Alert, on average 2.2 months earlier.** This is the project's core promise.
+- **In replays of 2011, 2017 and 2022, 23 of 25 alert episodes (92%) were flagged at least one
+  month before ALPS turned Alert, on average 1.8 months earlier.** This is the project's core promise.
 
 Everything runs on free tiers. User testing of the USSD menu with farmers and traders is the one
 success metric not yet measured.
@@ -208,7 +208,7 @@ The same pattern holds at 1 and 3 months (momentum 34% vs 25% at one month; seas
 | 2011 | 15 | 13 (87%) | 1.6 months | 235 of 326 (72%) |
 | 2017 | 9 | 9 (100%) | 2.0 months | 127 of 231 (55%) |
 | 2022 | 1 | 1 (100%) | 3.0 months | 29 of 38 (76%) |
-| **All** | **25** | **22 (88%)** | **2.2 months** | |
+| **All** | **25** | **23 (92%)** | **1.8 months** | |
 
 ![2011 replay](figures/replay_2011.png)
 
@@ -260,7 +260,7 @@ coverage was 94–97%: intervals calibrated on volatile years are conservative i
 | Forecasting | MAE vs naive at 2–3 months | ≥ 10% lower | 2.3% / 1.8% lower overall; 7–11% for wholesale; 13–15% in 2017 | ❌ overall |
 | Uncertainty | Actual prices inside 80% interval | 75–85% | 78.6% / 78.9% / 78.1% | ✅ |
 | Alerts | Recall / precision, 1–2 months | ≥ 0.70 / ≥ 0.50 | 0.83 / 0.67 (1 m); 0.82 / 0.33 (2 m) | ✅ 1 m, ❌ 2 m precision |
-| Alerts | Lead time in crisis replays | ≥ 1 month earlier than ALPS | 88% of episodes, mean 2.2 months | ✅ |
+| Alerts | Lead time in crisis replays | ≥ 1 month earlier than ALPS | 92% of episodes, mean 1.8 months | ✅ |
 | Product | Dashboard load | < 3 s | 0.45 s per interaction; ≈ 3 s cold start | ✅ |
 | Product | USSD reply time and depth | < 2 s, ≤ 3 screens | 15–190 ms; answer on screen 3; ≤ 182 chars | ✅ |
 | Product | Unaided USSD task completion | 8 of 10 users | Not yet tested | ⏳ |
