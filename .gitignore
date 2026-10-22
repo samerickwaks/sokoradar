@@ -16,8 +16,6 @@ data/sms_outbox.jsonl
 mlruns/
 .env
 .ipynb_checkpoints/
-# local tool settings (not part of the project)
-.claude/
 # working notes and helper scripts (not part of the submission)
 docs/deployment.md
 docs/demo_script.md
