@@ -14,9 +14,10 @@ Moringa School · Module 6 capstone · [Proposal](SokoRadar_Capstone_Proposal.pd
 
 ## Live links
 
-- Dashboard: [add link]
-- API documentation: [add link]/docs
-- USSD (Africa's Talking sandbox): [add service code]
+- Dashboard: [sokoradar.streamlit.app](https://sokoradar.streamlit.app)
+- API documentation: [sokoradar-api.onrender.com/docs](https://sokoradar-api.onrender.com/docs) (free hosting: the first
+  request after a quiet spell can take up to a minute)
+- USSD: dial `*384*79278#` in the Africa's Talking sandbox simulator
 
 ## Features
 

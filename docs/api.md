@@ -1,7 +1,9 @@
 # SokoRadar API
 
-Interactive documentation (OpenAPI) is served at `/docs` on any running instance, for example
-`http://127.0.0.1:8000/docs` locally. All responses are JSON unless noted; months are `YYYY-MM`.
+Live instance: `https://sokoradar-api.onrender.com`, with interactive documentation (OpenAPI) at
+[/docs](https://sokoradar-api.onrender.com/docs); a local run serves the same at `http://127.0.0.1:8000/docs`. The free
+server sleeps when idle, so the first request can take up to a minute. All responses are JSON
+unless noted; months are `YYYY-MM`.
 Every response carries an `X-Response-Time-ms` header.
 
 | Method | Path | Purpose |
@@ -25,10 +27,10 @@ Every response carries an `X-Response-Time-ms` header.
 ## Examples
 
 ```bash
-curl "http://127.0.0.1:8000/forecast?county=Turkana&commodity=maize&h=1"
-curl "http://127.0.0.1:8000/alerts?min_phase=Alert"
-curl "http://127.0.0.1:8000/what-if?rain_pct=50"
-curl -X POST http://127.0.0.1:8000/ussd -d "sessionId=1&serviceCode=*384*7262#&phoneNumber=+254700000000&text=2*1*1"
+curl "https://sokoradar-api.onrender.com/forecast?county=Turkana&commodity=maize&h=1"
+curl "https://sokoradar-api.onrender.com/alerts?min_phase=Alert"
+curl "https://sokoradar-api.onrender.com/what-if?rain_pct=50"
+curl -X POST https://sokoradar-api.onrender.com/ussd -d "sessionId=1&serviceCode=*384*79278#&phoneNumber=%2B254700000000&text=2*1*1"
 ```
 
 A forecast record:

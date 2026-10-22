@@ -270,6 +270,9 @@ coverage was 94–97%: intervals calibrated on volatile years are conservative i
 
 ![Architecture](../docs/architecture.svg)
 
+- **Live:** dashboard at [sokoradar.streamlit.app](https://sokoradar.streamlit.app), API documentation
+  at [sokoradar-api.onrender.com/docs](https://sokoradar-api.onrender.com/docs), and the USSD code `*384*79278#` in the
+  Africa's Talking sandbox simulator.
 - **Pipeline:** `python -m sokoradar.pipeline run` runs ingest → prepare → backtest and evaluate →
   train → forecast → publish in about 15 minutes. A GitHub Action runs it on the 6th of every month,
   runs the tests and commits the refreshed store, which redeploys the API (Render deploy hook) and the
