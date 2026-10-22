@@ -148,4 +148,4 @@ sms:
   sandbox: true
 
 ussd:
-  service_code: "*384*7262#"   # SOKO on the keypad; set to the code Africa's Talking assigns
+  service_code: "*384*79278#"   # SOKO on the keypad; set to the code Africa's Talking assigns
