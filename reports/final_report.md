@@ -340,8 +340,8 @@ python -m sokoradar.pipeline run      # rebuilds every number in this report
 pytest -q                             # automated tests
 ```
 
-Notebooks: `notebooks/01_eda_and_data_quality.ipynb`, `02_model_comparison.ipynb` and
-`03_alerts_explainability_replays.ipynb`. Metrics: `data/store/metrics.json`.
+Notebooks: `notebooks/00_eda_raw_datasets.ipynb`, `01_eda_and_data_quality.ipynb`, `02_model_comparison.ipynb`
+and `03_alerts_explainability_replays.ipynb`. Metrics: `data/store/metrics.json`.
 
 ## References
 
