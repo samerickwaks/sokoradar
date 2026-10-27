@@ -83,7 +83,7 @@ Bank commodity prices and Real-Time Food Prices (CC BY 4.0), and OCHA administra
 
 | Name | Role |
 |---|---|
-| [Name] | Data engineer |
+| [Name] | Data engineer |ss
 | [Name] | Forecasting lead |
 | [Siraji Barre Ali] | Alerts and explainability lead |
 | [Name] | Deployment engineer |
