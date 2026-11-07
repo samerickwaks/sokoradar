@@ -5,8 +5,10 @@ What it does, for every county price series (47 counties x 26 commodity/price-ty
   2. give the chance of a spike (a rise of more than 15%)  (M8a, a LightGBM spike classifier)
   3. raise an alert when that chance is above a threshold   (20% false-alarm budget, set on 2011-2014)
   4. list the three inputs that move the forecast most      (M5, explained with SHAP values)
+  5. after an alert, suggest a cheaper nearby county         (Daniella's "where to buy" rule, notebook 04_recommender)
 
-All of it was chosen and tested in notebooks/modelling/02_model_build.ipynb (backtest 2015-2024).
+Steps 1-4 were chosen and tested in notebooks/modelling/02_model_build.ipynb (backtest 2015-2024);
+step 5 in Daniella's 04_recommender notebook (same backtest, real prices only).
 The models are trained on targets up to TRAIN_END (Dec 2024) and nothing else; the settings below are
 frozen and must not be changed without re-running that notebook.
 
@@ -54,6 +56,14 @@ M5_PARAMS = {1: {**BASE, "num_leaves": 15, "min_child_samples": 1000, "learning_
              3: {**BASE, "num_leaves": 15, "min_child_samples": 200, "learning_rate": 0.05, "n_estimators": 200}}
 # Real market prices count more in training: each observed answer weighs (estimated rows / observed rows)
 # ("full balancing weight", chosen in the notebook for M1, M5 and M8a).
+
+# "Where to buy" (Daniella's recommender, 04_recommender): after an alert, the cheapest county TODAY within RADIUS_KM
+# with the same commodity and price type, if it is at least MIN_GAIN cheaper. Both counties need a real (market-recorded)
+# price at the origin month. Her backtest showed "cheapest today" saves as much as using the forecast, so no forecast is used.
+# Only the four crops she evaluated.
+RECOMMEND_CROPS = ["Dry Maize", "Sorghum", "Beans Rosecoco", "Red Irish Potatoes"]
+RADIUS_KM = 200
+MIN_GAIN = 0.05
 
 # Inputs
 PRICE_HISTORY = ["change_1m", "change_3m", "change_6m", "change_12m", "distance_from_normal", "jumpiness"]
@@ -309,6 +319,32 @@ def build_output(F, arima_price, prob, m5_change, pushes):
     return out.sort_values(["series", "origin_month", "horizon"]).reset_index(drop=True)
 
 
+def where_to_buy(out, prices, raw):
+    """Daniella's rule: for each alert, the cheapest nearby county today (real prices only), if at least MIN_GAIN cheaper."""
+    cty = pd.read_csv(raw / "counties.csv")[["county", "center_lat", "center_lon"]]
+    lat, lon = np.radians(cty["center_lat"].values), np.radians(cty["center_lon"].values)
+    a = (np.sin((lat[:, None] - lat[None, :]) / 2) ** 2
+         + np.cos(lat)[:, None] * np.cos(lat)[None, :] * np.sin((lon[:, None] - lon[None, :]) / 2) ** 2)
+    km = 2 * 6371 * np.arcsin(np.sqrt(a))
+    i, j = np.where((km <= RADIUS_KM) & (km > 0))
+    pairs = pd.DataFrame({"county": cty["county"].values[i], "buy_county": cty["county"].values[j], "km": km[i, j]})
+
+    real_today = prices.loc[prices["observed"], ["county", "commodity", "price_type", "month", "price_kes"]].rename(
+        columns={"county": "buy_county", "month": "origin_month", "price_kes": "buy_price"})
+    real_today["origin_month"] = real_today["origin_month"].dt.strftime("%Y-%m")
+    key = ["series", "origin_month", "horizon"]
+    A = out.loc[out["alert"] & out["origin_price_is_real"] & out["commodity"].isin(RECOMMEND_CROPS),
+                key + ["county", "commodity", "price_type", "origin_price_kes"]]
+    C = (A.merge(pairs, on="county").merge(real_today, on=["buy_county", "commodity", "price_type", "origin_month"]))
+    C = C[C["buy_price"] <= C["origin_price_kes"] * (1 - MIN_GAIN)]
+    best = C.loc[C.groupby(key)["buy_price"].idxmin()]
+    best = best.assign(where_to_buy_saving_pct=((1 - best["buy_price"] / best["origin_price_kes"]) * 100).round(1),
+                       where_to_buy_km=best["km"].round(0), where_to_buy_price_kes=best["buy_price"].round(2))
+    best = best.rename(columns={"buy_county": "where_to_buy_county"})
+    return out.merge(best[key + ["where_to_buy_county", "where_to_buy_price_kes", "where_to_buy_saving_pct", "where_to_buy_km"]],
+                     on=key, how="left")
+
+
 def write_safely(df, path, info):
     """Write to a temporary file first and rename it once complete, so a crash never leaves a half-written file."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -352,7 +388,10 @@ def run(prices, raw, origins, train_end):
     prob = m8a_probability(T, F)
     print("3/3 Drivers (M5 + SHAP) ...", flush=True)
     m5_change, pushes = m5_drivers(T, F)
-    out = build_output(F, arima_price, prob, m5_change, pushes)
+    out = where_to_buy(build_output(F, arima_price, prob, m5_change, pushes), prices, raw)
+    n_alert = int((out["alert"] & out["commodity"].isin(RECOMMEND_CROPS)).sum())
+    print(f"Where to buy: {int(out['where_to_buy_county'].notna().sum()):,} suggestions for {n_alert:,} alerts on the four "
+          "recommender crops (a suggestion needs real prices today in both counties)")
     print(f"Finished in {time.time() - t0:.0f} s")
     return out
 
