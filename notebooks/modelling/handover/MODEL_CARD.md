@@ -12,7 +12,7 @@ For each of the 1,222 county price series (47 counties x 26 commodity/price-type
 | Spike probability | M8a: LightGBM classifier ("will the price rise more than 15%?") on price history and calendar | |
 | Alert | M8a probability above a threshold per horizon | Thresholds set so alerts fire in 20% of calm months (2011-2014) |
 | Top 3 drivers | M5: LightGBM on price history, weather, related crops and the economy, explained with SHAP values | Explains *what the model leans on*, not cause and effect |
-| Where to buy | Daniella's recommender (notebook `04_recommender`): after an alert, the cheapest county **today** within 200 km, same commodity and price type, at least 5% cheaper | Maize, sorghum, Rosecoco beans and red potatoes only; needs a real market price in both counties |
+| Where to buy | Daniella's recommender (notebook `04_recommender`): after an alert, the cheapest county within 200 km on **real** prices from the alert month, same commodity and price type, at least 5% cheaper | Maize, sorghum, Rosecoco beans and red potatoes only; both counties need a real market price that month |
 
 **The three columns come from different models on purpose** (each is the best at its job). So a flat price forecast can sit next to an alert: the forecast is the most likely path, the alert says the chance of a big rise is higher than usual. Show them as separate items, not as one story.
 
@@ -25,7 +25,10 @@ python sokoradar_forecast.py                              # from the latest mont
 python sokoradar_forecast.py --origins 2024-06:2024-12    # several origin months
 python sokoradar_forecast.py --out path/to/forecasts.csv
 python sokoradar_forecast.py --check                       # proves the script reproduces the notebook (needs the saved backtest files)
+python sokoradar_forecast.py --chart "Nakuru | Dry Maize | Wholesale" "Garissa | Dry Maize | Retail"   # also save a chart
 ```
+
+`--chart` saves `<csv name>_chart.png`: for each named series, the price history (real prices as dots), the 1-month alerts in the run, and the ARIMA forecast path. Where the real price a month later is in the data, each alert is marked caught / false alarm / missed. For origin months up to Dec 2024 these are **in-sample** (the models learned those outcomes), and the chart says so: they look better than a fair test. The fair picture of past alerts is in the notebook (section 10, "Alerts in action").
 
 Inputs (found automatically, or pass `--data` and `--raw`):
 - `SokoRadar_County_2006_2024_long.csv` from the data pipeline (every series, every month)
@@ -46,14 +49,16 @@ It takes about 3 minutes. It writes a CSV and a `.json` beside it (settings, dat
 | `drivers_model_change_pct` | M5's predicted change (the number the drivers explain) |
 | `drivers_typical_change_pct` | M5's starting point before any input (the average change) |
 | `driver_1..3`, `driver_k_family`, `driver_k_push_points` | The three inputs that move M5's prediction most, in plain words; push in percentage points (+ = pushes the price up). Typical change + all pushes = `drivers_model_change_pct` |
-| `where_to_buy_county`, `where_to_buy_price_kes`, `where_to_buy_saving_pct`, `where_to_buy_km` | Suggested cheaper county, its real price today, the saving against the alert county's price today, and the distance between county centres. Blank when there is no alert, no real prices, or no neighbour at least 5% cheaper |
+| `where_to_buy_county`, `where_to_buy_price_kes`, `where_to_buy_price_month` | Suggested cheaper county, its real price, and the month of that price (the alert month) |
+| `where_to_buy_compared_with_kes`, `where_to_buy_compared_month` | The alert county's real price it was compared with, and its month |
+| `where_to_buy_saving_pct`, `where_to_buy_km` | The saving between those two prices, and the distance between county centres. All where-to-buy columns are blank when there is no alert, no real prices that month, or no neighbour at least 5% cheaper |
 
 ## How well it works (backtest 2015-2024, real market prices only)
 
 - **Forecast:** average error 9.0% / 12.3% / 14.5% at 1 / 2 / 3 months, level with "next month = this month" (ratio 1.016 / 1.005 / 1.003). No model we built beats that overall; prices are hard to predict from this data.
 - **Alerts:** catch 48% / 45% / 34% of spikes; 22% / 32% / 39% of alerts are followed by a spike; 80% / 81% / 86% of calm months stay quiet. After an alert, a spike is about **twice as likely** as in an average month (e.g. 22% vs 11% at 1 month).
 - **Drivers:** price history explains most of M5's forecasts; then the economy and weather. El Niño is the largest outside driver.
-- **Where to buy** (Daniella's backtest, 812 alerts with real prices): the suggested county was really cheaper 94-97% of the time, saving about a quarter of the price. Choosing by the forecast did no better than "cheapest today", so the rule uses today's prices.
+- **Where to buy:** replaying this rule on the 2015-2024 backtest alerts gave 1,235 suggestions; where real prices a month later exist (956), the suggested county was really cheaper **85%** of the time, with an average saving of **20%**. Choosing by the forecast did no better than "cheapest today" (Daniella's `04_recommender`), so the rule uses today's real prices. Using prices up to 2 months old was tried and dropped: those suggestions were right only 71% of the time, saving 8%.
 
 ## Limits (please show these to users)
 
@@ -61,7 +66,7 @@ It takes about 3 minutes. It writes a CSV and a `.json` beside it (settings, dat
 - **No alert does not mean calm:** about half of spikes come without one. Most spikes can't be seen in this data (they need event information such as floods, conflict or policy changes).
 - **Mostly estimated prices:** only about 5% of the county prices were recorded in a market. Scores are on those real prices; forecasts for series with no real prices are less certain.
 - **Not yet tested on 2025-2026.** The sealed test runs once, on Day 5. Performance by group (ASAL counties, wholesale vs retail, commodity) and in past crises (2011, 2017, 2022) has not been checked.
-- **Where to buy is rare and for bulk buyers.** It needs real prices in both counties that month, so most alerts have no suggestion (2024: 64 suggestions for 3,188 alerts on the four crops). Savings are before transport, handling and market fees; they pay off for a lorry load, not a few bags. Distances are between county centres, not roads.
+- **Where to buy is rare and for bulk buyers.** It needs real prices in both counties in the alert month, and only 19 of 47 counties reported a real price for the four crops in 2024, so most alerts have no suggestion (2024: 64 suggestions for 3,188 alerts; Dec 2024: 2 for 399). About one suggestion in seven was wrong in the backtest. More market reports would fill it; estimated prices are not used because they are partly copied from neighbouring counties. Savings are before transport, handling and market fees; they pay off for a lorry load, not a few bags. Distances are between county centres, not roads.
 - **Drivers explain the model, not the market.** "Diesel pushed the forecast up" means the model leans on diesel, not proof that diesel caused it.
 - **Inputs must be current.** Weather and economy files end in Dec 2024. For later origin months, update the raw files; the forecast and alerts don't need them, but the drivers do (the script warns when they are missing).
 

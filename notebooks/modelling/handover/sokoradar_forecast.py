@@ -16,6 +16,7 @@ Run (from Anaconda Prompt):
     python sokoradar_forecast.py                         # forecast from the latest month in the data
     python sokoradar_forecast.py --origins 2024-06:2024-12
     python sokoradar_forecast.py --check                  # rebuild the 2024 backtest year and compare with the notebook
+    python sokoradar_forecast.py --origins 2024-01:2024-12 --chart "Nakuru | Dry Maize | Wholesale"   # also draw a chart
 
 Output: a CSV (one row per series, origin month and horizon) and a small JSON describing the run.
 See MODEL_CARD.md in this folder for what the columns mean and the model's limits.
@@ -57,13 +58,16 @@ M5_PARAMS = {1: {**BASE, "num_leaves": 15, "min_child_samples": 1000, "learning_
 # Real market prices count more in training: each observed answer weighs (estimated rows / observed rows)
 # ("full balancing weight", chosen in the notebook for M1, M5 and M8a).
 
-# "Where to buy" (Daniella's recommender, 04_recommender): after an alert, the cheapest county TODAY within RADIUS_KM
-# with the same commodity and price type, if it is at least MIN_GAIN cheaper. Both counties need a real (market-recorded)
-# price at the origin month. Her backtest showed "cheapest today" saves as much as using the forecast, so no forecast is used.
-# Only the four crops she evaluated.
+# "Where to buy" (Daniella's recommender, 04_recommender): after an alert, the cheapest nearby county on recent REAL
+# (market-recorded) prices, within RADIUS_KM, same commodity and price type, if at least MIN_GAIN cheaper.
+# Her backtest showed "cheapest today" saves as much as using the forecast, so no forecast is used. Only the four crops
+# she evaluated. Real prices must be from the origin month itself (RECENT_MONTHS = 1), her tested rule.
+# A 3-month window was tried (8 Nov 2026): replayed on the 2015-2024 backtest, same-month suggestions were really cheaper
+# a month later 85% of the time (average saving 20%), older-price ones only 71% (8%), so it was dropped.
 RECOMMEND_CROPS = ["Dry Maize", "Sorghum", "Beans Rosecoco", "Red Irish Potatoes"]
 RADIUS_KM = 200
 MIN_GAIN = 0.05
+RECENT_MONTHS = 1                # 1 = real prices from the origin month only
 
 # Inputs
 PRICE_HISTORY = ["change_1m", "change_3m", "change_6m", "change_12m", "distance_from_normal", "jumpiness"]
@@ -320,7 +324,8 @@ def build_output(F, arima_price, prob, m5_change, pushes):
 
 
 def where_to_buy(out, prices, raw):
-    """Daniella's rule: for each alert, the cheapest nearby county today (real prices only), if at least MIN_GAIN cheaper."""
+    """Daniella's rule: for each alert, the cheapest nearby county on recent real prices, if at least MIN_GAIN cheaper.
+    Each county's price is its latest real price within RECENT_MONTHS up to the origin month; its month is shown."""
     cty = pd.read_csv(raw / "counties.csv")[["county", "center_lat", "center_lon"]]
     lat, lon = np.radians(cty["center_lat"].values), np.radians(cty["center_lon"].values)
     a = (np.sin((lat[:, None] - lat[None, :]) / 2) ** 2
@@ -329,27 +334,98 @@ def where_to_buy(out, prices, raw):
     i, j = np.where((km <= RADIUS_KM) & (km > 0))
     pairs = pd.DataFrame({"county": cty["county"].values[i], "buy_county": cty["county"].values[j], "km": km[i, j]})
 
-    real_today = prices.loc[prices["observed"], ["county", "commodity", "price_type", "month", "price_kes"]].rename(
-        columns={"county": "buy_county", "month": "origin_month", "price_kes": "buy_price"})
-    real_today["origin_month"] = real_today["origin_month"].dt.strftime("%Y-%m")
+    # latest real price per county, commodity and price type, within the recent window of each origin month
+    real = prices.loc[prices["observed"] & prices["commodity"].isin(RECOMMEND_CROPS),
+                      ["county", "commodity", "price_type", "month", "price_kes"]]
+    parts = []
+    for origin in pd.to_datetime(out["origin_month"].unique()):
+        r = real[(real["month"] <= origin) & (real["month"] > origin - pd.DateOffset(months=RECENT_MONTHS))]
+        r = r.sort_values("month").groupby(["county", "commodity", "price_type"]).tail(1)
+        parts.append(r.assign(origin_month=f"{origin:%Y-%m}", month=r["month"].dt.strftime("%Y-%m")))
+    latest = pd.concat(parts, ignore_index=True)
+
     key = ["series", "origin_month", "horizon"]
-    A = out.loc[out["alert"] & out["origin_price_is_real"] & out["commodity"].isin(RECOMMEND_CROPS),
-                key + ["county", "commodity", "price_type", "origin_price_kes"]]
-    C = (A.merge(pairs, on="county").merge(real_today, on=["buy_county", "commodity", "price_type", "origin_month"]))
-    C = C[C["buy_price"] <= C["origin_price_kes"] * (1 - MIN_GAIN)]
+    A = out.loc[out["alert"] & out["commodity"].isin(RECOMMEND_CROPS), key + ["county", "commodity", "price_type"]]
+    A = A.merge(latest.rename(columns={"price_kes": "base_price", "month": "base_month"}),
+                on=["county", "commodity", "price_type", "origin_month"])           # the alert county's own recent real price
+    C = A.merge(pairs, on="county").merge(
+        latest.rename(columns={"county": "buy_county", "price_kes": "buy_price", "month": "buy_month"}),
+        on=["buy_county", "commodity", "price_type", "origin_month"])
+    C = C[C["buy_price"] <= C["base_price"] * (1 - MIN_GAIN)]
     best = C.loc[C.groupby(key)["buy_price"].idxmin()]
-    best = best.assign(where_to_buy_saving_pct=((1 - best["buy_price"] / best["origin_price_kes"]) * 100).round(1),
-                       where_to_buy_km=best["km"].round(0), where_to_buy_price_kes=best["buy_price"].round(2))
-    best = best.rename(columns={"buy_county": "where_to_buy_county"})
-    return out.merge(best[key + ["where_to_buy_county", "where_to_buy_price_kes", "where_to_buy_saving_pct", "where_to_buy_km"]],
-                     on=key, how="left")
+    best = pd.DataFrame({**{k: best[k] for k in key},
+                         "where_to_buy_county": best["buy_county"],
+                         "where_to_buy_price_kes": best["buy_price"].round(2),
+                         "where_to_buy_price_month": best["buy_month"],
+                         "where_to_buy_compared_with_kes": best["base_price"].round(2),
+                         "where_to_buy_compared_month": best["base_month"],
+                         "where_to_buy_saving_pct": ((1 - best["buy_price"] / best["base_price"]) * 100).round(1),
+                         "where_to_buy_km": best["km"].round(0)})
+    return out.merge(best, on=key, how="left")
+
+
+def chart(out, prices, series_list, path):
+    """One panel per series: price history, the 1-month alerts in this run, and the forecast path from the last origin.
+    Where the real price one month later is already known, each alert month is marked caught / false alarm / missed."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    unknown = [s for s in series_list if s not in set(out["series"])]
+    if unknown:
+        sys.exit(f"Unknown series for --chart: {unknown}. Use the exact name, e.g. 'Nakuru | Dry Maize | Wholesale'.")
+    INK, MUTED, BLUE, RED, GRID = "#1f1f1e", "#8a8985", "#2a6fdb", "#e34948", "#e6e5e1"
+    real = prices.set_index(["series", "month"])
+    fig, axes = plt.subplots(len(series_list), 1, figsize=(13, 3.6 * len(series_list)), squeeze=False)
+    for ax, s in zip(axes[:, 0], series_list):
+        o = out[(out["series"] == s)].copy()
+        o["origin"] = pd.to_datetime(o["origin_month"])
+        first, last = o["origin"].min(), o["origin"].max()
+        p = prices[(prices["series"] == s) & (prices["month"] >= first - pd.DateOffset(months=24))]
+        ax.plot(p["month"], p["price_kes"], color="#c9c8c3", lw=1.2, label="price (estimated months included)")
+        r = p[p["observed"]]
+        ax.plot(r["month"], r["price_kes"], "o", ms=3, color=MUTED, label="real market price")
+        h1 = o[o["horizon"] == 1]
+        nxt = [real["observed"].get((s, t + pd.DateOffset(months=1)), False) for t in h1["origin"]]
+        later = [real["price_kes"].get((s, t + pd.DateOffset(months=1)), np.nan) for t in h1["origin"]]
+        h1 = h1.assign(known=nxt, spike=np.array(later) / h1["origin_price_kes"].values - 1 > SPIKE)
+        k, u = h1[h1["known"]], h1[~h1["known"] & h1["alert"]]
+        groups = [(k[k["alert"] & k["spike"]], dict(marker="o", ms=9, color=BLUE, mec="white", mew=1.5), "alert, and a spike came (caught)"),
+                  (k[k["alert"] & ~k["spike"]], dict(marker="o", ms=8, mfc="none", mec=MUTED, mew=1.3), "alert, no spike (false alarm)"),
+                  (k[~k["alert"] & k["spike"]], dict(marker="x", ms=9, color=RED, mew=2), "spike came, no alert (missed)"),
+                  (u, dict(marker="^", ms=10, color=BLUE), "alert, no real price next month to check it")]
+        for g, style, label in groups:
+            if len(g):
+                ax.plot(g["origin"], g["origin_price_kes"], ls="none", label=label, **style)
+        path_rows = o[o["origin"] == last].sort_values("horizon")
+        ax.plot([last] + list(pd.to_datetime(path_rows["target_month"])),
+                [path_rows["origin_price_kes"].iloc[0]] + list(path_rows["forecast_price_kes"]),
+                ls="--", color=INK, lw=1.2, label=f"ARIMA forecast from {last:%b %Y}")
+        n_spikes = int(k["spike"].sum())
+        caught = int((k["alert"] & k["spike"]).sum())
+        note = f"caught {caught} of {n_spikes} known spikes, {int((k['alert'] & ~k['spike']).sum())} false alarms" if len(k) else "no outcomes known yet"
+        ax.set_title(f"{s}:  {note}", loc="left", fontsize=11, color=INK)
+        ax.set_ylabel("KES per kg", color=INK)
+        ax.grid(axis="y", color=GRID)
+        ax.set_axisbelow(True)
+        for side in ["top", "right"]:
+            ax.spines[side].set_visible(False)
+        ax.legend(loc="upper left", fontsize=8, frameon=False, ncol=2)
+    title = "SokoRadar: spike alerts 1 month ahead (M8a) and the price forecast (ARIMA)"
+    if pd.to_datetime(out["origin_month"]).min() < pd.Timestamp(TRAIN_END):
+        title += f"\nIn-sample: the models learned outcomes up to {TRAIN_END}, so past alerts here look better than a fair test"
+    fig.suptitle(title, x=0.01, ha="left", fontsize=13, color=INK)
+    plt.tight_layout(rect=(0, 0, 1, 1 - 0.05 * title.count("\n") / len(series_list) - 0.03))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(path, dpi=110)
+    plt.close(fig)
+    print(f"Chart saved to {path.resolve()}")
 
 
 def write_safely(df, path, info):
     """Write to a temporary file first and rename it once complete, so a crash never leaves a half-written file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    df.to_csv(tmp, index=False)
+    df.to_csv(tmp, index=False, encoding="utf-8-sig")     # utf-8-sig so Excel shows "El Niño" correctly
     os.replace(tmp, path)
     meta, tmp = path.with_suffix(".json"), path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(info, indent=1, default=str))
@@ -391,7 +467,7 @@ def run(prices, raw, origins, train_end):
     out = where_to_buy(build_output(F, arima_price, prob, m5_change, pushes), prices, raw)
     n_alert = int((out["alert"] & out["commodity"].isin(RECOMMEND_CROPS)).sum())
     print(f"Where to buy: {int(out['where_to_buy_county'].notna().sum()):,} suggestions for {n_alert:,} alerts on the four "
-          "recommender crops (a suggestion needs real prices today in both counties)")
+          f"recommender crops (a suggestion needs real prices from the last {RECENT_MONTHS} months in both counties)")
     print(f"Finished in {time.time() - t0:.0f} s")
     return out
 
@@ -438,6 +514,8 @@ def main():
     ap.add_argument("--out", default="sokoradar_forecasts.csv", help="output CSV (default: sokoradar_forecasts.csv)")
     ap.add_argument("--check", action="store_true", help="rebuild the 2024 backtest year and compare with the notebook")
     ap.add_argument("--forecasts-dir", help="folder with the notebook's saved forecasts (for --check; default: <output>/forecasts)")
+    ap.add_argument("--chart", nargs="+", metavar="SERIES",
+                    help="also draw a chart for these series, e.g. --chart \"Nakuru | Dry Maize | Wholesale\" (saved next to the CSV)")
     args = ap.parse_args()
 
     data_path, raw = find_data(args.data, args.raw)
@@ -458,6 +536,8 @@ def main():
     path = Path(args.out)
     write_safely(out, path, info)
     print(f"Saved {len(out):,} rows to {path.resolve()} (alerts: {int(out['alert'].sum()):,})")
+    if args.chart:
+        chart(out, prices, args.chart, path.with_name(path.stem + "_chart.png"))
 
 
 if __name__ == "__main__":
