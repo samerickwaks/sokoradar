@@ -1,0 +1,5 @@
+# forecast outputs are data: never commit them
+*.csv
+*.json
+*.tmp
+__pycache__/
